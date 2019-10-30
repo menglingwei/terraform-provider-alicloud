@@ -131,7 +131,10 @@ func dnsPriorityDiffSuppressFunc(k, old, new string, d *schema.ResourceData) boo
 }
 
 func slbInternetDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
-	if internet, ok := d.GetOk("internet"); ok && internet.(bool) {
+	if internet, ok := d.GetOkExists("internet"); ok && internet.(bool) {
+		return true
+	}
+	if internet, ok := d.GetOkExists("address_type"); ok && internet.(string) == "internet" {
 		return true
 	}
 	return false
@@ -424,6 +427,16 @@ func slbRuleListenerSyncDiffSuppressFunc(k, old, new string, d *schema.ResourceD
 
 func slbAddressDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
 	if v, ok := d.GetOk("internet"); ok && v.(bool) {
+		return true
+	}
+	return false
+}
+
+func kmsDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if v, ok := d.GetOk("password"); ok && v.(string) != "" {
+		return true
+	}
+	if v, ok := d.GetOk("account_password"); ok && v.(string) != "" {
 		return true
 	}
 	return false

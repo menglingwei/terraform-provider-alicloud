@@ -54,6 +54,7 @@ func resourceAliyunInstance() *schema.Resource {
 			"credit_specification": {
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ValidateFunc: validateAllowedStringValue([]string{
 					string(CreditSpecificationStandard),
 					string(CreditSpecificationUnlimited),
@@ -119,9 +120,9 @@ func resourceAliyunInstance() *schema.Resource {
 				Sensitive: true,
 			},
 			"kms_encrypted_password": {
-				Type:          schema.TypeString,
-				Optional:      true,
-				ConflictsWith: []string{"password"},
+				Type:             schema.TypeString,
+				Optional:         true,
+				DiffSuppressFunc: kmsDiffSuppressFunc,
 			},
 			"kms_encryption_context": {
 				Type:     schema.TypeMap,
@@ -286,7 +287,6 @@ func resourceAliyunInstance() *schema.Resource {
 			"user_data": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ForceNew: true,
 			},
 			"role_name": {
 				Type:             schema.TypeString,
@@ -908,7 +908,12 @@ func buildAliyunInstanceArgs(d *schema.ResourceData, meta interface{}) (*ecs.Run
 	}
 
 	if v := d.Get("user_data").(string); v != "" {
-		request.UserData = base64.StdEncoding.EncodeToString([]byte(v))
+		_, base64DecodeError := base64.StdEncoding.DecodeString(v)
+		if base64DecodeError == nil {
+			request.UserData = v
+		} else {
+			request.UserData = base64.StdEncoding.EncodeToString([]byte(v))
+		}
 	}
 
 	if v := d.Get("role_name").(string); v != "" {
@@ -1114,6 +1119,20 @@ func modifyInstanceAttribute(d *schema.ResourceData, meta interface{}) (bool, er
 		d.SetPartial("description")
 		request.Description = d.Get("description").(string)
 		update = true
+	}
+
+	if d.HasChange("user_data") {
+		d.SetPartial("user_data")
+		if v, ok := d.GetOk("user_data"); ok && v.(string) != "" {
+			_, base64DecodeError := base64.StdEncoding.DecodeString(v.(string))
+			if base64DecodeError == nil {
+				request.UserData = v.(string)
+			} else {
+				request.UserData = base64.StdEncoding.EncodeToString([]byte(v.(string)))
+			}
+		}
+		update = true
+		reboot = true
 	}
 
 	if d.HasChange("host_name") {
