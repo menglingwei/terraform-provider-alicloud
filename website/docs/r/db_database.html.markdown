@@ -70,16 +70,14 @@ The following arguments are supported:
 
 * `description` - (ForceNew) Database description. It cannot begin with https://. It must start with a Chinese character or English letter. It can include Chinese and English characters, underlines (_), hyphens (-), and numbers. The length may be 2-256 characters.
 
+-> **NOTE:** The value of "name" or "character_set"  does not support modification.
+
 
 ## Attributes Reference
 
 The following attributes are exported:
 
 * `id` - The current database resource ID. Composed of instance ID and database name with format `<instance_id>:<name>`.
-* `instance_id` - The Id of DB instance.
-* `name` - The name of DB database.
-* `character_set` - Character set that database used.
-* `description` - The database description.
 
 ## Import
 

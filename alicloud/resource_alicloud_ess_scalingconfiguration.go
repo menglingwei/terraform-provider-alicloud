@@ -197,6 +197,35 @@ func resourceAlicloudEssScalingConfiguration() *schema.Resource {
 				Optional: true,
 				Default:  false,
 			},
+			"password": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Get("password_inherit").(bool)
+				},
+			},
+			"password_inherit": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+			},
+			"kms_encrypted_password": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Get("password_inherit").(bool) || d.Get("password").(string) != ""
+				},
+			},
+			"kms_encryption_context": {
+				Type:     schema.TypeMap,
+				Optional: true,
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					return d.Get("kms_encrypted_password").(string) == ""
+				},
+				Elem: schema.TypeString,
+			},
 		},
 	}
 }
@@ -296,6 +325,10 @@ func modifyEssScalingConfiguration(d *schema.ResourceData, meta interface{}) err
 		d.SetPartial("override")
 	}
 
+	if d.HasChange("password_inherit") {
+		request.PasswordInherit = requests.NewBoolean(d.Get("password_inherit").(bool))
+		d.SetPartial("password_inherit")
+	}
 	if d.HasChange("image_id") || d.Get("override").(bool) {
 		request.ImageId = d.Get("image_id").(string)
 		d.SetPartial("image_id")
@@ -535,6 +568,7 @@ func resourceAliyunEssScalingConfigurationRead(d *schema.ResourceData, meta inte
 	d.Set("tags", essTagsToMap(object.Tags.Tag))
 	d.Set("instance_name", object.InstanceName)
 	d.Set("override", d.Get("override").(bool))
+	d.Set("password_inherit", object.PasswordInherit)
 
 	if sg, ok := d.GetOk("security_group_id"); ok && sg.(string) != "" {
 		d.Set("security_group_id", object.SecurityGroupId)
@@ -646,9 +680,24 @@ func buildAlicloudEssScalingConfigurationArgs(d *schema.ResourceData, meta inter
 	request.ScalingGroupId = d.Get("scaling_group_id").(string)
 	request.ImageId = d.Get("image_id").(string)
 	request.SecurityGroupId = d.Get("security_group_id").(string)
+	request.PasswordInherit = requests.NewBoolean(d.Get("password_inherit").(bool))
 
 	securityGroupId := d.Get("security_group_id").(string)
 	securityGroupIds := d.Get("security_group_ids").([]interface{})
+
+	password := d.Get("password").(string)
+	kmsPassword := d.Get("kms_encrypted_password").(string)
+
+	if password != "" {
+		request.Password = password
+	} else if kmsPassword != "" {
+		kmsService := KmsService{client}
+		decryptResp, err := kmsService.Decrypt(kmsPassword, d.Get("kms_encryption_context").(map[string]interface{}))
+		if err != nil {
+			return nil, WrapError(err)
+		}
+		request.Password = decryptResp.Plaintext
+	}
 
 	if securityGroupId == "" && (securityGroupIds == nil || len(securityGroupIds) == 0) {
 		return nil, WrapError(Error("security_group_id or security_group_ids must be assigned"))

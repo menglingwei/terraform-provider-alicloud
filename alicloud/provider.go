@@ -14,10 +14,12 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform/helper/hashcode"
 	"github.com/hashicorp/terraform/helper/mutexkv"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/terraform"
+	"github.com/mitchellh/go-homedir"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -87,6 +89,7 @@ func Provider() terraform.ResourceProvider {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Description: descriptions["shared_credentials_file"],
+				DefaultFunc: schema.EnvDefaultFunc("ALICLOUD_SHARED_CREDENTIALS_FILE", ""),
 			},
 			"profile": {
 				Type:        schema.TypeString,
@@ -125,6 +128,7 @@ func Provider() terraform.ResourceProvider {
 			"alicloud_eips":                   dataSourceAlicloudEips(),
 			"alicloud_key_pairs":              dataSourceAlicloudKeyPairs(),
 			"alicloud_kms_keys":               dataSourceAlicloudKmsKeys(),
+			"alicloud_dns_resolution_lines":   dataSourceAlicloudDnsResolutionLines(),
 			"alicloud_dns_domains":            dataSourceAlicloudDnsDomains(),
 			"alicloud_dns_groups":             dataSourceAlicloudDnsGroups(),
 			"alicloud_dns_records":            dataSourceAlicloudDnsRecords(),
@@ -150,6 +154,7 @@ func Provider() terraform.ResourceProvider {
 			"alicloud_slb_acls":                          dataSourceAlicloudSlbAcls(),
 			"alicloud_slb_server_certificates":           dataSourceAlicloudSlbServerCertificates(),
 			"alicloud_slb_ca_certificates":               dataSourceAlicloudSlbCACertificates(),
+			"alicloud_slb_domain_extensions":             dataSourceAlicloudSlbDomainExtensions(),
 			"alicloud_oss_bucket_objects":                dataSourceAlicloudOssBucketObjects(),
 			"alicloud_oss_buckets":                       dataSourceAlicloudOssBuckets(),
 			"alicloud_ons_instances":                     dataSourceAlicloudOnsInstances(),
@@ -220,7 +225,10 @@ func Provider() terraform.ResourceProvider {
 			"alicloud_ots_tables":                        dataSourceAlicloudOtsTables(),
 			"alicloud_cloud_connect_networks":            dataSourceAlicloudCloudConnectNetworks(),
 			"alicloud_emr_instance_types":                dataSourceAlicloudEmrInstanceTypes(),
+			"alicloud_emr_disk_types":                    dataSourceAlicloudEmrDiskTypes(),
 			"alicloud_emr_main_versions":                 dataSourceAlicloudEmrMainVersions(),
+			"alicloud_sag_acls":                          dataSourceAlicloudSagAcls(),
+			"alicloud_yundun_dbaudit_instance":           dataSourceAlicloudDbauditInstances(),
 		},
 		ResourcesMap: map[string]*schema.Resource{
 			"alicloud_instance":                           resourceAliyunInstance(),
@@ -276,6 +284,7 @@ func Provider() terraform.ResourceProvider {
 			"alicloud_slb_listener":                  resourceAliyunSlbListener(),
 			"alicloud_slb_attachment":                resourceAliyunSlbAttachment(),
 			"alicloud_slb_backend_server":            resourceAliyunSlbBackendServer(),
+			"alicloud_slb_domain_extension":          resourceAlicloudSlbDomainExtension(),
 			"alicloud_slb_server_group":              resourceAliyunSlbServerGroup(),
 			"alicloud_slb_master_slave_server_group": resourceAliyunSlbMasterSlaveServerGroup(),
 			"alicloud_slb_rule":                      resourceAliyunSlbRule(),
@@ -380,6 +389,13 @@ func Provider() terraform.ResourceProvider {
 			"alicloud_network_acl_entries":                 resourceAliyunNetworkAclEntries(),
 			"alicloud_emr_cluster":                         resourceAlicloudEmrCluster(),
 			"alicloud_cloud_connect_network":               resourceAlicloudCloudConnectNetwork(),
+			"alicloud_sag_acl":                             resourceAlicloudSagAcl(),
+			"alicloud_sag_acl_rule":                        resourceAlicloudSagAclRule(),
+			"alicloud_sag_qos":                             resourceAlicloudSagQos(),
+			"alicloud_sag_qos_policy":                      resourceAlicloudSagQosPolicy(),
+			"alicloud_sag_qos_car":                         resourceAlicloudSagQosCar(),
+			"alicloud_sag_snat_entry":                      resourceAlicloudSagSnatEntry(),
+			"alicloud_yundun_dbaudit_instance":             resourceAlicloudDbauditInstance(),
 		},
 
 		ConfigureFunc: providerConfigure,
@@ -509,6 +525,8 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 		config.BssOpenApiEndpoint = strings.TrimSpace(endpoints["bssopenapi"].(string))
 		config.DdoscooEndpoint = strings.TrimSpace(endpoints["ddoscoo"].(string))
 		config.DdosbgpEndpoint = strings.TrimSpace(endpoints["ddosbgp"].(string))
+		config.EmrEndpoint = strings.TrimSpace(endpoints["emr"].(string))
+		config.CasEndpoint = strings.TrimSpace(endpoints["cas"].(string))
 	}
 
 	if ots_instance_name, ok := d.GetOk("ots_instance_name"); ok && ots_instance_name.(string) != "" {
@@ -530,6 +548,13 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 		config.FcEndpoint = strings.TrimSpace(fcEndpoint.(string))
 	}
 
+	if config.ConfigurationSource == "" {
+		sourceName := fmt.Sprintf("Default/%s:%s", config.AccessKey, strings.Trim(uuid.New().String(), "-"))
+		if len(sourceName) > 64 {
+			sourceName = sourceName[:64]
+		}
+		config.ConfigurationSource = sourceName
+	}
 	client, err := config.Client()
 	if err != nil {
 		return nil, err
@@ -644,6 +669,8 @@ func init() {
 		"ddoscoo_endpoint": "Use this to override the default endpoint URL constructed from the `region`. It's typically used to connect to custom DDOSCOO endpoints.",
 
 		"ddosbgp_endpoint": "Use this to override the default endpoint URL constructed from the `region`. It's typically used to connect to custom DDOSBGP endpoints.",
+
+		"emr_endpoint": "Use this to override the default endpoint URL constructed from the `region`. It's typically used to connect to custom EMR endpoints.",
 	}
 }
 
@@ -910,6 +937,12 @@ func endpointsSchema() *schema.Schema {
 					Default:     "",
 					Description: descriptions["ddosbgp_endpoint"],
 				},
+				"emr": {
+					Type:        schema.TypeString,
+					Optional:    true,
+					Default:     "",
+					Description: descriptions["emr_endpoint"],
+				},
 			},
 		},
 		Set: endpointsToHash,
@@ -954,6 +987,7 @@ func endpointsToHash(v interface{}) int {
 	buf.WriteString(fmt.Sprintf("%s-", m["bssopenapi"].(string)))
 	buf.WriteString(fmt.Sprintf("%s-", m["ddoscoo"].(string)))
 	buf.WriteString(fmt.Sprintf("%s-", m["ddosbgp"].(string)))
+	buf.WriteString(fmt.Sprintf("%s-", m["emr"].(string)))
 	return hashcode.String(buf.String())
 }
 
@@ -964,7 +998,11 @@ func getConfigFromProfile(d *schema.ResourceData, ProfileKey string) (interface{
 			return nil, nil
 		}
 		current := d.Get("profile").(string)
-		profilePath := d.Get("shared_credentials_file").(string)
+		// Set CredsFilename, expanding home directory
+		profilePath, err := homedir.Expand(d.Get("shared_credentials_file").(string))
+		if err != nil {
+			return nil, WrapError(err)
+		}
 		if profilePath == "" {
 			profilePath = fmt.Sprintf("%s/.aliyun/config.json", os.Getenv("HOME"))
 			if runtime.GOOS == "windows" {
@@ -972,7 +1010,7 @@ func getConfigFromProfile(d *schema.ResourceData, ProfileKey string) (interface{
 			}
 		}
 		providerConfig = make(map[string]interface{})
-		_, err := os.Stat(profilePath)
+		_, err = os.Stat(profilePath)
 		if !os.IsNotExist(err) {
 			data, err := ioutil.ReadFile(profilePath)
 			if err != nil {
