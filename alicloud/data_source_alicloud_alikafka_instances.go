@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/alikafka"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -18,12 +19,13 @@ func dataSourceAlicloudAlikafkaInstances() *schema.Resource {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 				ForceNew: true,
 			},
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 				ForceNew:     true,
 			},
 			"output_file": {
@@ -88,6 +90,14 @@ func dataSourceAlicloudAlikafkaInstances() *schema.Resource {
 						},
 						"topic_quota": {
 							Type:     schema.TypeInt,
+							Computed: true,
+						},
+						"paid_type": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"spec_type": {
+							Type:     schema.TypeString,
 							Computed: true,
 						},
 						"zone_id": {
@@ -155,6 +165,11 @@ func alikafkaInstancesDecriptionAttributes(d *schema.ResourceData, instancesInfo
 	var s []map[string]interface{}
 
 	for _, item := range instancesInfo {
+
+		paidType := PostPaid
+		if item.PaidType == 0 {
+			paidType = PrePaid
+		}
 		mapping := map[string]interface{}{
 			"id":             item.InstanceId,
 			"name":           item.Name,
@@ -168,6 +183,8 @@ func alikafkaInstancesDecriptionAttributes(d *schema.ResourceData, instancesInfo
 			"disk_type":      item.DiskType,
 			"disk_size":      item.DiskSize,
 			"topic_quota":    item.TopicNumLimit,
+			"paid_type":      paidType,
+			"spec_type":      item.SpecType,
 			"zone_id":        item.ZoneId,
 		}
 

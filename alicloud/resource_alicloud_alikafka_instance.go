@@ -1,14 +1,18 @@
 package alicloud
 
 import (
+	"errors"
 	"strconv"
 	"time"
+
+	"github.com/denverdino/aliyungo/common"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/alikafka"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -26,7 +30,8 @@ func resourceAlicloudAlikafkaInstance() *schema.Resource {
 			"name": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateAlikafkaInstanceNameLen,
+				Computed:     true,
+				ValidateFunc: validation.StringLenBetween(3, 64),
 			},
 			"topic_quota": {
 				Type:     schema.TypeInt,
@@ -50,6 +55,17 @@ func resourceAlicloudAlikafkaInstance() *schema.Resource {
 				Type:     schema.TypeInt,
 				Required: true,
 			},
+			"paid_type": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				ValidateFunc: validation.StringInSlice([]string{string(common.PrePaid), string(common.PostPaid)}, false),
+				Default:      PostPaid,
+			},
+			"spec_type": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "normal",
+			},
 			"eip_max": {
 				Type:     schema.TypeInt,
 				Optional: true,
@@ -67,6 +83,7 @@ func resourceAlicloudAlikafkaInstance() *schema.Resource {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
+			"tags": tagsSchema(),
 		},
 	}
 }
@@ -84,6 +101,8 @@ func resourceAlicloudAlikafkaInstanceCreate(d *schema.ResourceData, meta interfa
 	deployType := d.Get("deploy_type").(int)
 	ioMax := d.Get("io_max").(int)
 	vswitchId := d.Get("vswitch_id").(string)
+	paidType := d.Get("paid_type").(string)
+	specType := d.Get("spec_type").(string)
 
 	// Get vswitch info by vswitchId
 	vsw, err := vpcService.DescribeVSwitch(vswitchId)
@@ -91,7 +110,7 @@ func resourceAlicloudAlikafkaInstanceCreate(d *schema.ResourceData, meta interfa
 		return WrapError(err)
 	}
 
-	// 1. Create post-pay order
+	// 1. Create order
 	createOrderReq := alikafka.CreateCreatePostPayOrderRequest()
 	createOrderReq.RegionId = regionId
 	createOrderReq.TopicQuota = requests.NewInteger(topicQuota)
@@ -99,6 +118,11 @@ func resourceAlicloudAlikafkaInstanceCreate(d *schema.ResourceData, meta interfa
 	createOrderReq.DiskSize = requests.NewInteger(diskSize)
 	createOrderReq.DeployType = requests.NewInteger(deployType)
 	createOrderReq.IoMax = requests.NewInteger(ioMax)
+	createOrderReq.PaidType = requests.NewInteger(1)
+	createOrderReq.SpecType = specType
+	if paidType == string(PrePaid) {
+		createOrderReq.PaidType = requests.NewInteger(0)
+	}
 	if v, ok := d.GetOk("eip_max"); ok {
 		createOrderReq.EipMax = requests.NewInteger(v.(int))
 	}
@@ -175,7 +199,7 @@ func resourceAlicloudAlikafkaInstanceCreate(d *schema.ResourceData, meta interfa
 		return WrapError(err)
 	}
 
-	return resourceAlicloudAlikafkaInstanceRead(d, meta)
+	return resourceAlicloudAlikafkaInstanceUpdate(d, meta)
 }
 
 func resourceAlicloudAlikafkaInstanceRead(d *schema.ResourceData, meta interface{}) error {
@@ -203,6 +227,17 @@ func resourceAlicloudAlikafkaInstanceRead(d *schema.ResourceData, meta interface
 	d.Set("vpc_id", object.VpcId)
 	d.Set("vswitch_id", object.VSwitchId)
 	d.Set("zone_id", object.ZoneId)
+	d.Set("paid_type", PostPaid)
+	d.Set("spec_type", object.SpecType)
+	if object.PaidType == 0 {
+		d.Set("paid_type", PrePaid)
+	}
+
+	tags, err := alikafkaService.DescribeTags(d.Id(), nil, TagResourceInstance)
+	if err != nil {
+		return WrapError(err)
+	}
+	d.Set("tags", alikafkaService.tagsToMap(tags))
 
 	return nil
 }
@@ -211,7 +246,14 @@ func resourceAlicloudAlikafkaInstanceUpdate(d *schema.ResourceData, meta interfa
 
 	client := meta.(*connectivity.AliyunClient)
 	alikafkaService := AlikafkaService{client}
-
+	d.Partial(true)
+	if err := alikafkaService.setInstanceTags(d, TagResourceInstance); err != nil {
+		return WrapError(err)
+	}
+	if d.IsNewResource() {
+		d.Partial(false)
+		return resourceAlicloudAlikafkaInstanceRead(d, meta)
+	}
 	// Process change instance name.
 	if d.HasChange("name") {
 		var name string
@@ -240,6 +282,61 @@ func resourceAlicloudAlikafkaInstanceUpdate(d *schema.ResourceData, meta interfa
 		if err != nil {
 			return WrapErrorf(err, DefaultErrorMsg, d.Id(), modifyInstanceNameReq.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
+		d.SetPartial("name")
+	}
+
+	// Process paid type change, note only support change from post to pre pay.
+	if d.HasChange("paid_type") {
+		o, n := d.GetChange("paid_type")
+		oldPaidType := o.(string)
+		newPaidType := n.(string)
+		oldPaidTypeInt := 1
+		newPaidTypeInt := 1
+		if oldPaidType == string(PrePaid) {
+			oldPaidTypeInt = 0
+		}
+		if newPaidType == string(PrePaid) {
+			newPaidTypeInt = 0
+		}
+		if oldPaidTypeInt == 1 && newPaidTypeInt == 0 {
+
+			convertPostPayOrderReq := alikafka.CreateConvertPostPayOrderRequest()
+			convertPostPayOrderReq.InstanceId = d.Id()
+			convertPostPayOrderReq.RegionId = client.RegionId
+			err := resource.Retry(5*time.Minute, func() *resource.RetryError {
+				raw, err := alikafkaService.client.WithAlikafkaClient(func(alikafkaClient *alikafka.Client) (interface{}, error) {
+					return alikafkaClient.ConvertPostPayOrder(convertPostPayOrderReq)
+				})
+				if err != nil {
+					if IsExceptedErrors(err, []string{AlikafkaThrottlingUser}) {
+						time.Sleep(10 * time.Second)
+						return resource.RetryableError(err)
+					}
+					return resource.NonRetryableError(err)
+				}
+				addDebug(convertPostPayOrderReq.GetActionName(), raw, convertPostPayOrderReq.RpcRequest, convertPostPayOrderReq)
+				return nil
+			})
+			if err != nil {
+				return WrapErrorf(err, DefaultErrorMsg, d.Id(), convertPostPayOrderReq.GetActionName(), AlibabaCloudSdkGoERROR)
+			}
+
+			// Make sure convert success
+			object, err := alikafkaService.DescribeAlikafkaInstance(d.Id())
+			if err != nil {
+				return WrapError(err)
+			}
+
+			err = alikafkaService.WaitForAlikafkaInstanceUpdated(d.Id(), object.TopicNumLimit,
+				object.DiskSize, object.IoMax, object.EipMax, newPaidTypeInt, object.SpecType, DefaultTimeoutMedium)
+			if err != nil {
+				return WrapError(err)
+			}
+		} else {
+			return WrapError(errors.New("paid type only support change from post pay to pre pay"))
+		}
+
+		d.SetPartial("paid_type")
 	}
 
 	attributeUpdate := false
@@ -250,8 +347,9 @@ func resourceAlicloudAlikafkaInstanceUpdate(d *schema.ResourceData, meta interfa
 	upgradeReq.TopicQuota = requests.NewInteger(d.Get("topic_quota").(int))
 	upgradeReq.DiskSize = requests.NewInteger(d.Get("disk_size").(int))
 	upgradeReq.IoMax = requests.NewInteger(d.Get("io_max").(int))
+	upgradeReq.SpecType = d.Get("spec_type").(string)
 
-	if d.HasChange("topic_quota") || d.HasChange("disk_size") || d.HasChange("io_max") {
+	if d.HasChange("topic_quota") || d.HasChange("disk_size") || d.HasChange("io_max") || d.HasChange("spec_type") {
 		attributeUpdate = true
 	}
 	eipMax := 0
@@ -259,7 +357,6 @@ func resourceAlicloudAlikafkaInstanceUpdate(d *schema.ResourceData, meta interfa
 		eipMax = v.(int)
 	}
 	if d.HasChange("eip_max") {
-
 		if v, ok := d.GetOk("eip_max"); ok {
 			eipMax = v.(int)
 		}
@@ -285,10 +382,19 @@ func resourceAlicloudAlikafkaInstanceUpdate(d *schema.ResourceData, meta interfa
 		if err != nil {
 			return WrapErrorf(err, DefaultErrorMsg, d.Id(), upgradeReq.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
+		d.SetPartial("topic_quota")
+		d.SetPartial("disk_size")
+		d.SetPartial("io_max")
+		d.SetPartial("spec_type")
+		d.SetPartial("eip_max")
 	}
 
-	err := alikafkaService.WaitForAlikafkaInstanceUpdated(d.Id(), d.Get("topic_quota").(int),
-		d.Get("disk_size").(int), d.Get("io_max").(int), eipMax, DefaultTimeoutMedium)
+	paidType := 1
+	if d.Get("paid_type").(string) == string(PrePaid) {
+		paidType = 0
+	}
+	err := alikafkaService.WaitForAlikafkaInstanceUpdated(d.Id(), d.Get("topic_quota").(int), d.Get("disk_size").(int),
+		d.Get("io_max").(int), eipMax, paidType, d.Get("spec_type").(string), DefaultTimeoutMedium)
 
 	if err != nil {
 		return WrapError(err)
@@ -300,6 +406,7 @@ func resourceAlicloudAlikafkaInstanceUpdate(d *schema.ResourceData, meta interfa
 		return WrapError(err)
 	}
 
+	d.Partial(true)
 	return resourceAlicloudAlikafkaInstanceRead(d, meta)
 }
 
@@ -307,6 +414,11 @@ func resourceAlicloudAlikafkaInstanceDelete(d *schema.ResourceData, meta interfa
 
 	client := meta.(*connectivity.AliyunClient)
 	alikafkaService := AlikafkaService{client}
+
+	// Pre paid instance can not be release.
+	if d.Get("paid_type").(string) == string(PrePaid) {
+		return nil
+	}
 
 	request := alikafka.CreateReleaseInstanceRequest()
 	request.InstanceId = d.Id()

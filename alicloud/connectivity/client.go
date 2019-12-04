@@ -36,6 +36,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/smartag"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/yundun_bastionhost"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/yundun_dbaudit"
 	"github.com/aliyun/aliyun-datahub-sdk-go/datahub"
 	sls "github.com/aliyun/aliyun-log-go-sdk"
@@ -45,7 +46,7 @@ import (
 	"github.com/aliyun/fc-go-sdk"
 	"github.com/denverdino/aliyungo/cdn"
 	"github.com/denverdino/aliyungo/cs"
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 
 	"fmt"
 	"log"
@@ -111,6 +112,7 @@ type AliyunClient struct {
 	emrconn                      *emr.Client
 	sagconn                      *smartag.Client
 	dbauditconn                  *yundun_dbaudit.Client
+	bastionhostconn              *yundun_bastionhost.Client
 }
 
 type ApiVersion string
@@ -137,8 +139,8 @@ const Module = "Terraform-Module"
 
 var goSdkMutex = sync.RWMutex{} // The Go SDK is not thread-safe
 // The main version number that is being run at the moment.
-var providerVersion = "1.62.1"
-var terraformVersion = strings.TrimSuffix(terraform.VersionString(), "-dev")
+var providerVersion = "1.63.0"
+var terraformVersion = strings.TrimSuffix(schema.Provider{}.TerraformVersion, "-dev")
 
 // Client for AliyunClient
 func (c *Config) Client() (*AliyunClient, error) {
@@ -1395,9 +1397,6 @@ func (client *AliyunClient) WithAlikafkaClient(do func(*alikafka.Client) (interf
 		endpoint := client.config.AlikafkaEndpoint
 		if endpoint == "" {
 			endpoint = loadEndpoint(client.config.RegionId, ALIKAFKACode)
-			if endpoint == "" {
-				endpoint = "alikafka.aliyuncs.com"
-			}
 		}
 		if endpoint != "" {
 			endpoints.AddEndpointMapping(client.config.RegionId, string(ALIKAFKACode), endpoint)
@@ -1484,4 +1483,22 @@ func (client *AliyunClient) WithDbauditClient(do func(*yundun_dbaudit.Client) (i
 	}
 
 	return do(client.dbauditconn)
+}
+
+func (client *AliyunClient) WithBastionhostClient(do func(*yundun_bastionhost.Client) (interface{}, error)) (interface{}, error) {
+	goSdkMutex.Lock()
+	defer goSdkMutex.Unlock()
+
+	if client.bastionhostconn == nil {
+		bastionhostconn, err := yundun_bastionhost.NewClientWithOptions(client.config.RegionId, client.getSdkConfig(), client.config.getAuthCredential(true))
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize the BASTIONHOST client: %#v", err)
+		}
+		bastionhostconn.AppendUserAgent(Terraform, terraformVersion)
+		bastionhostconn.AppendUserAgent(Provider, providerVersion)
+		bastionhostconn.AppendUserAgent(Module, client.config.ConfigurationSource)
+		client.bastionhostconn = bastionhostconn
+	}
+
+	return do(client.bastionhostconn)
 }

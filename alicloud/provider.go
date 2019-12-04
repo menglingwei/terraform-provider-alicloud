@@ -11,14 +11,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"
 
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 	"github.com/hashicorp/terraform/helper/hashcode"
 	"github.com/hashicorp/terraform/helper/mutexkv"
-	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/hashicorp/terraform/terraform"
 	"github.com/mitchellh/go-homedir"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
@@ -108,7 +110,7 @@ func Provider() terraform.ResourceProvider {
 				Optional:     true,
 				Default:      "",
 				Description:  descriptions["configuration_source"],
-				ValidateFunc: validateStringLengthInRange(0, 64),
+				ValidateFunc: validation.StringLenBetween(0, 64),
 			},
 		},
 		DataSourcesMap: map[string]*schema.Resource{
@@ -128,6 +130,8 @@ func Provider() terraform.ResourceProvider {
 			"alicloud_eips":                   dataSourceAlicloudEips(),
 			"alicloud_key_pairs":              dataSourceAlicloudKeyPairs(),
 			"alicloud_kms_keys":               dataSourceAlicloudKmsKeys(),
+			"alicloud_kms_ciphertext":         dataSourceAlicloudKmsCiphertext(),
+			"alicloud_kms_plaintext":          dataSourceAlicloudKmsPlaintext(),
 			"alicloud_dns_resolution_lines":   dataSourceAlicloudDnsResolutionLines(),
 			"alicloud_dns_domains":            dataSourceAlicloudDnsDomains(),
 			"alicloud_dns_groups":             dataSourceAlicloudDnsGroups(),
@@ -229,9 +233,11 @@ func Provider() terraform.ResourceProvider {
 			"alicloud_emr_main_versions":                 dataSourceAlicloudEmrMainVersions(),
 			"alicloud_sag_acls":                          dataSourceAlicloudSagAcls(),
 			"alicloud_yundun_dbaudit_instance":           dataSourceAlicloudDbauditInstances(),
+			"alicloud_yundun_bastionhost_instances":      dataSourceAlicloudBastionhostInstances(),
 		},
 		ResourcesMap: map[string]*schema.Resource{
 			"alicloud_instance":                           resourceAliyunInstance(),
+			"alicloud_image":                              resourceAliCloudImage(),
 			"alicloud_ram_role_attachment":                resourceAlicloudRamRoleAttachment(),
 			"alicloud_disk":                               resourceAliyunDisk(),
 			"alicloud_disk_attachment":                    resourceAliyunDiskAttachment(),
@@ -305,6 +311,7 @@ func Provider() terraform.ResourceProvider {
 			"alicloud_key_pair":                      resourceAlicloudKeyPair(),
 			"alicloud_key_pair_attachment":           resourceAlicloudKeyPairAttachment(),
 			"alicloud_kms_key":                       resourceAlicloudKmsKey(),
+			"alicloud_kms_ciphertext":                resourceAlicloudKmsCiphertext(),
 			"alicloud_ram_user":                      resourceAlicloudRamUser(),
 			"alicloud_ram_account_password_policy":   resourceAlicloudRamAccountPasswordPolicy(),
 			"alicloud_ram_access_key":                resourceAlicloudRamAccessKey(),
@@ -389,13 +396,17 @@ func Provider() terraform.ResourceProvider {
 			"alicloud_network_acl_entries":                 resourceAliyunNetworkAclEntries(),
 			"alicloud_emr_cluster":                         resourceAlicloudEmrCluster(),
 			"alicloud_cloud_connect_network":               resourceAlicloudCloudConnectNetwork(),
+			"alicloud_cloud_connect_network_attachment":    resourceAlicloudCloudConnectNetworkAttachment(),
+			"alicloud_cloud_connect_network_grant":         resourceAlicloudCloudConnectNetworkGrant(),
 			"alicloud_sag_acl":                             resourceAlicloudSagAcl(),
 			"alicloud_sag_acl_rule":                        resourceAlicloudSagAclRule(),
 			"alicloud_sag_qos":                             resourceAlicloudSagQos(),
 			"alicloud_sag_qos_policy":                      resourceAlicloudSagQosPolicy(),
 			"alicloud_sag_qos_car":                         resourceAlicloudSagQosCar(),
 			"alicloud_sag_snat_entry":                      resourceAlicloudSagSnatEntry(),
+			"alicloud_sag_dnat_entry":                      resourceAlicloudSagDnatEntry(),
 			"alicloud_yundun_dbaudit_instance":             resourceAlicloudDbauditInstance(),
+			"alicloud_yundun_bastionhost_instance":         resourceAlicloudBastionhostInstance(),
 		},
 
 		ConfigureFunc: providerConfigure,

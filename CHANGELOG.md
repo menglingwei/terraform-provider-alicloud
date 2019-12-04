@@ -1,4 +1,51 @@
-## 1.62.2 (Unreleased)
+## 1.63.1 (Unreleased)
+## 1.63.0 (December 02, 2019)
+
+- **New Resource:** `alicloud_cloud_connect_network_grant` ([#1921](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1921))
+- **New Data Source:** `alicloud_yundun_bastionhost_instances` ([#1894](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1894))
+- **New Resource:** `alicloud_yundun_bastionhost_instance` ([#1894](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1894))
+- **New Data Source:** `alicloud_kms_ciphertext` ([#1858](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1858))
+- **New Data Source:** `alicloud_kms_plaintext` ([#1858](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1858))
+- **New Resource:** `alicloud_kms_ciphertext` ([#1858](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1858))
+- **New Resource:** `alicloud_sag_dnat_entry` ([#1823](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1823))
+
+IMPROVEMENTS:
+
+- improve(vpc): add module support for vpc, vswitch and route entry ([#1934](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1934))
+- improve(db_instance): tags supports case sensitive ([#1930](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1930))
+- improve(mongodb_instance): adding replica_set_name to output from alicloud_mongodb_instance ([#1929](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1929))
+- improve(slb): add a new field delete_protection_validation ([#1927](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1927))
+- improve(kms): improve kms testcases use new method ([#1926](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1926))
+- improve(provider): added 'Computed : true' to all 'ids' fields. ([#1924](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1924))
+- improve(validator): Delete TagNum Count ([#1920](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1920))
+- improve(sag_dnat_entry): modify docs "add subcategory" ([#1918](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1918))
+- improve(sdk): upgrade alibaba go sdk ([#1917](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1917))
+- improve(db_database):update db_database doc ([#1916](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1916))
+- improve(validator): shift validator to offical ones ([#1912](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1912))
+- improve(alikafka): Support pre paid instance & Support tag resource ([#1873](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1873))
+
+BUG FIXES:
+
+- fix(dns_record): fix dns_record testcase bug ([#1892](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1892))
+- fix(ecs): FIX: query system disk does not exist because no resource_group_id is specified ([#1884](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1884))
+
+## 1.62.2 (November 26, 2019)
+
+IMPROVEMENTS:
+
+- improve(mongodb): feature mongodb support postpaid to prepaid ([#1908](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1908))
+- improve(kvstore_instance_classes): skip unsupported zones ([#1901](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1901))
+
+BUG FIXES:
+
+- fix(pvtz_attachment): fix vpc_ids diff error ([#1911](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1911))
+- fix(kafka): remove the const endpoint ([#1910](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1910))
+- fix(ess): modify the type of from Set to List. ([#1905](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1905))
+- fix managedkubernetes demo  documentation ([#1903](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1903))
+- fix the bug of TestAccAlicloudEmrCluster_local_storage failed ([#1902](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1902))
+- fix(db_instance): fix postgre testcase ([#1899](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1899))
+- fix(db_instance): test case ([#1898](https://github.com/terraform-providers/terraform-provider-alicloud/issues/1898))
+
 ## 1.62.1 (November 22, 2019)
 
 IMPROVEMENTS:

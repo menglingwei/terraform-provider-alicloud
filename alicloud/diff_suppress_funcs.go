@@ -10,7 +10,7 @@ import (
 	"github.com/denverdino/aliyungo/dns"
 	"github.com/denverdino/aliyungo/ecs"
 	"github.com/denverdino/aliyungo/rds"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 )
 
 func httpHttpsDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
@@ -437,6 +437,13 @@ func kmsDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
 		return true
 	}
 	if v, ok := d.GetOk("account_password"); ok && v.(string) != "" {
+		return true
+	}
+	return false
+}
+
+func sagDnatEntryTypeDiffSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
+	if d.Get("type").(string) != "Intranet" {
 		return true
 	}
 	return false

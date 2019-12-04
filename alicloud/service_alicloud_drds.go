@@ -1,7 +1,7 @@
 package alicloud
 
 import (
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/drds"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
@@ -28,7 +28,7 @@ func (s *DrdsService) DescribeDrdsInstance(id string) (*drds.DescribeDrdsInstanc
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 	response, _ = raw.(*drds.DescribeDrdsInstanceResponse)
-	if response.Data.Status == "5" {
+	if response.Data.Status == "RELEASE" {
 		return response, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 	}
 	return response, nil

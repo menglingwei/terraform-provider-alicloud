@@ -6,7 +6,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -18,22 +19,23 @@ func dataSourceAlicloudDBInstances() *schema.Resource {
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 			},
 			"ids": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 			},
 			"engine": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					string(MySQL),
 					string(SQLServer),
 					string(PPAS),
 					string(PostgreSQL),
-				}),
+				}, false),
 			},
 			"status": {
 				Type:     schema.TypeString,
@@ -44,12 +46,12 @@ func dataSourceAlicloudDBInstances() *schema.Resource {
 			"db_type": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					"Primary",
 					"Readonly",
 					"Guard",
 					"Temp",
-				}),
+				}, false),
 			},
 			"vpc_id": {
 				Type:     schema.TypeString,
@@ -62,10 +64,10 @@ func dataSourceAlicloudDBInstances() *schema.Resource {
 			"connection_mode": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					"Standard",
 					"Safe",
-				}),
+				}, false),
 			},
 			"tags": tagsSchema(),
 			"output_file": {

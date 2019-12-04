@@ -6,7 +6,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/dds"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -18,20 +19,21 @@ func dataSourceAlicloudMongoDBInstances() *schema.Resource {
 			"name_regex": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateNameRegex,
+				ValidateFunc: validation.ValidateRegexp,
 			},
 			"ids": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
+				Computed: true,
 			},
 			"instance_type": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ValidateFunc: validateAllowedStringValue([]string{
+				ValidateFunc: validation.StringInSlice([]string{
 					string(MongoDBSharding),
 					string(MongoDBReplicate),
-				}),
+				}, false),
 			},
 			"instance_class": {
 				Type:     schema.TypeString,

@@ -10,8 +10,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
-	"github.com/hashicorp/terraform/helper/resource"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -142,11 +142,12 @@ func (s *EcsService) DescribeInstanceAttribute(id string) (instance ecs.Describe
 	return *response, nil
 }
 
-func (s *EcsService) QueryInstanceSystemDisk(id string) (disk ecs.Disk, err error) {
+func (s *EcsService) QueryInstanceSystemDisk(id, rg string) (disk ecs.Disk, err error) {
 	request := ecs.CreateDescribeDisksRequest()
 	request.InstanceId = id
 	request.DiskType = string(DiskTypeSystem)
 	request.RegionId = s.client.RegionId
+	request.ResourceGroupId = rg
 	raw, err := s.client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
 		return ecsClient.DescribeDisks(request)
 	})
@@ -929,10 +930,11 @@ func (s *EcsService) AttachKeyPair(keyName string, instanceIds []interface{}) er
 	return nil
 }
 
-func (s *EcsService) QueryInstanceAllDisks(id string) ([]string, error) {
+func (s *EcsService) QueryInstanceAllDisks(id, rg string) ([]string, error) {
 	request := ecs.CreateDescribeDisksRequest()
 	request.RegionId = s.client.RegionId
 	request.InstanceId = id
+	request.ResourceGroupId = rg
 	raw, err := s.client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
 		return ecsClient.DescribeDisks(request)
 	})
@@ -955,6 +957,26 @@ func (s *EcsService) QueryInstanceAllDisks(id string) ([]string, error) {
 func (s *EcsService) SnapshotStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
 		object, err := s.DescribeSnapshot(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if object.Status == failState {
+				return object, object.Status, WrapError(Error(FailedToReachTargetStatus, object.Status))
+			}
+		}
+		return object, object.Status, nil
+	}
+}
+
+func (s *EcsService) ImageStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeImageById(id)
 		if err != nil {
 			if NotFoundError(err) {
 				// Set this to nil as if we didn't find anything.

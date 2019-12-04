@@ -1,14 +1,19 @@
 package alicloud
 
 import (
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/bssopenapi"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
-	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -32,12 +37,18 @@ func dataSourceAlicloudDBInstanceClasses() *schema.Resource {
 				Optional: true,
 				ForceNew: true,
 			},
+			"sorted_by": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				ForceNew:     true,
+				ValidateFunc: validation.StringInSlice([]string{"Price"}, false),
+			},
 			"instance_charge_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
 				Default:      PostPaid,
-				ValidateFunc: validateAllowedStringValue([]string{string(PostPaid), string(PrePaid)}),
+				ValidateFunc: validation.StringInSlice([]string{string(PostPaid), string(PrePaid)}, false),
 			},
 			"db_instance_class": {
 				Type:     schema.TypeString,
@@ -50,7 +61,7 @@ func dataSourceAlicloudDBInstanceClasses() *schema.Resource {
 			"storage_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validateAllowedStringValue([]string{"cloud_ssd", "local_ssd"}),
+				ValidateFunc: validation.StringInSlice([]string{"cloud_ssd", "local_ssd"}, false),
 			},
 			"multi_zone": {
 				Type:     schema.TypeBool,
@@ -90,6 +101,10 @@ func dataSourceAlicloudDBInstanceClasses() *schema.Resource {
 							Computed: true,
 						},
 						"instance_class": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"price": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
@@ -159,6 +174,7 @@ func dataSourceAlicloudDBInstanceClassesRead(d *schema.ResourceData, meta interf
 		Index        int
 		StorageRange map[string]string
 		ZoneIds      []map[string]interface{}
+		Price        float64
 	}
 
 	classInfos := make(map[string]ClassInfosItem)
@@ -248,6 +264,24 @@ func dataSourceAlicloudDBInstanceClassesRead(d *schema.ResourceData, meta interf
 		}
 		classIds = append(classIds, k)
 	}
+	// The price will be query and assigned when the engine_version be specified and the sorted_by is "Price", Instead, it is assigned a null character.
+	sortedBy := d.Get("sorted_by").(string)
+	if engineVersionGot && len(infos) > 0 && sortedBy == "Price" {
+		bssopenapiService := BssopenapiService{client}
+		priceList, err := getDBInstanceClassPrice(bssopenapiService, instanceChargeType,
+			infos, engineVersion.(string))
+		if err != nil {
+			return WrapError(err)
+		}
+		for i, info := range infos {
+			info["price"] = fmt.Sprintf("%.4f", priceList[i])
+		}
+		sort.SliceStable(infos, func(i, j int) bool {
+			iPrice, _ := strconv.ParseFloat(infos[i]["price"].(string), 64)
+			jPrice, _ := strconv.ParseFloat(infos[j]["price"].(string), 64)
+			return iPrice < jPrice
+		})
+	}
 
 	d.SetId(dataResourceIdHash(ids))
 	err = d.Set("instance_classes", infos)
@@ -262,4 +296,37 @@ func dataSourceAlicloudDBInstanceClassesRead(d *schema.ResourceData, meta interf
 		}
 	}
 	return nil
+}
+
+func getDBInstanceClassPrice(bssopenapiService BssopenapiService, instanceChargeType string, infos []map[string]interface{}, version string) ([]float64, error) {
+	client := bssopenapiService.client
+	var modules interface{}
+	var productType string
+	moduleCode := "DBInstanceClass"
+	var payAsYouGo []bssopenapi.GetPayAsYouGoPriceModuleList
+	var subsciption []bssopenapi.GetSubscriptionPriceModuleList
+	for _, info := range infos {
+		config := fmt.Sprintf("DBInstanceClass:%s,EngineVersion:%s,Region:%s", info["instance_class"], version, client.Region)
+		if instanceChargeType == string(Postpaid) {
+			payAsYouGo = append(payAsYouGo, bssopenapi.GetPayAsYouGoPriceModuleList{
+				ModuleCode: moduleCode,
+				Config:     config,
+				PriceType:  "Hour",
+			})
+		} else {
+			subsciption = append(subsciption, bssopenapi.GetSubscriptionPriceModuleList{
+				ModuleCode: moduleCode,
+				Config:     config,
+			})
+		}
+	}
+
+	if len(payAsYouGo) != 0 {
+		modules = payAsYouGo
+		productType = "bards"
+	} else {
+		modules = subsciption
+	}
+
+	return bssopenapiService.GetInstanceTypePrice("rds", productType, modules)
 }

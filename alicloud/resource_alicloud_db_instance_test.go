@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/rds"
-	"github.com/hashicorp/terraform/helper/resource"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud/connectivity"
 )
 
@@ -242,30 +242,18 @@ func TestAccAlicloudDBInstanceMysql(t *testing.T) {
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"tags": map[string]string{
-						"created": "tf",
-						"for":     "acceptance test",
+						"Created": "TF",
+						"For":     "acceptance Test",
 					},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"tags.%":       "2",
-						"tags.created": "tf",
-						"tags.for":     "acceptance test",
+						"tags.Created": "TF",
+						"tags.For":     "acceptance Test",
 					}),
 				),
 			},
-			{
-				Config: testAccConfig(map[string]interface{}{
-					"tags": map[string]string{
-						"Created": "TF",
-						"For":     "acceptance test",
-					},
-				}),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(nil),
-				),
-			},
-
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"tags": REMOVEKEY,
@@ -273,8 +261,8 @@ func TestAccAlicloudDBInstanceMysql(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"tags.%":       REMOVEKEY,
-						"tags.created": REMOVEKEY,
-						"tags.for":     REMOVEKEY,
+						"tags.Created": REMOVEKEY,
+						"tags.For":     REMOVEKEY,
 					}),
 				),
 			},
