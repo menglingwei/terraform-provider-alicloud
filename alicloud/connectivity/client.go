@@ -25,6 +25,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/gpdb"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/kms"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/location"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/market"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/nas"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ons"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ots"
@@ -113,6 +114,7 @@ type AliyunClient struct {
 	sagconn                      *smartag.Client
 	dbauditconn                  *yundun_dbaudit.Client
 	bastionhostconn              *yundun_bastionhost.Client
+	marketconn                   *market.Client
 }
 
 type ApiVersion string
@@ -139,7 +141,7 @@ const Module = "Terraform-Module"
 
 var goSdkMutex = sync.RWMutex{} // The Go SDK is not thread-safe
 // The main version number that is being run at the moment.
-var providerVersion = "1.63.0"
+var providerVersion = "1.64.0"
 var terraformVersion = strings.TrimSuffix(schema.Provider{}.TerraformVersion, "-dev")
 
 // Client for AliyunClient
@@ -1501,4 +1503,31 @@ func (client *AliyunClient) WithBastionhostClient(do func(*yundun_bastionhost.Cl
 	}
 
 	return do(client.bastionhostconn)
+}
+
+func (client *AliyunClient) WithMarketClient(do func(*market.Client) (interface{}, error)) (interface{}, error) {
+	goSdkMutex.Lock()
+	defer goSdkMutex.Unlock()
+
+	// Initialize the Market API client if necessary
+	if client.marketconn == nil {
+		endpoint := client.config.MarketEndpoint
+		if endpoint == "" {
+			endpoint = loadEndpoint(client.RegionId, MARKETCode)
+		}
+		if endpoint != "" {
+			endpoints.AddEndpointMapping(client.RegionId, "MARKET", endpoint)
+		}
+		marketconn, err := market.NewClientWithOptions(client.RegionId, client.getSdkConfig(), client.config.getAuthCredential(true))
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize the Market client: %#v", err)
+		}
+
+		marketconn.AppendUserAgent(Terraform, terraformVersion)
+		marketconn.AppendUserAgent(Provider, providerVersion)
+		marketconn.AppendUserAgent(Module, client.config.ConfigurationSource)
+		client.marketconn = marketconn
+	}
+
+	return do(client.marketconn)
 }
